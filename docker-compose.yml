@@ -1,0 +1,14 @@
+services:
+  openheart:
+    image: ${OPENHEART_IMAGE:-ghcr.io/yozlog/openheart:latest}
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
+volumes:
+  data:
