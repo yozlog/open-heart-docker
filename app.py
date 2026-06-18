@@ -16,6 +16,11 @@ ALLOWED_DOMAINS = [
     for domain in os.environ.get("OPENHEART_ALLOWED_DOMAINS", "").split(",")
     if domain.strip()
 ]
+ALLOWED_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("OPENHEART_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+}
 
 lock = threading.Lock()
 db = None
@@ -112,6 +117,17 @@ def tenant_key(self, path: str) -> str:
     return f"{host}|{path}"
 
 
+def request_origin_header(self) -> str:
+    return (self.headers.get("Origin") or "").strip().rstrip("/")
+
+
+def cors_origin_allowed(self) -> str:
+    if not ALLOWED_ORIGINS:
+        return ""
+    origin = request_origin_header(self)
+    return origin if origin in ALLOWED_ORIGINS else ""
+
+
 class Handler(BaseHTTPRequestHandler):
     def _path_key(self) -> str:
         return urlsplit(self.path).path or "/"
@@ -119,10 +135,51 @@ class Handler(BaseHTTPRequestHandler):
     def _send_json(self, payload, status=200):
         data = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
+        origin = cors_origin_allowed(self)
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Credentials", "false")
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _send_plain(self, text, status=200):
+        data = text.encode("utf-8")
+        self.send_response(status)
+        origin = cors_origin_allowed(self)
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Credentials", "false")
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _send_cors_preflight(self):
+        origin = cors_origin_allowed(self)
+        if not origin:
+            self.send_response(403)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"forbidden")
+            return
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
+        self.send_header("Access-Control-Allow-Credentials", "false")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        request_headers = self.headers.get("Access-Control-Request-Headers", "Content-Type, Accept")
+        self.send_header("Access-Control-Allow-Headers", request_headers)
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.end_headers()
+
+    def do_OPTIONS(self):
+        if reject_if_disallowed(self):
+            return
+        self._send_cors_preflight()
 
     def do_GET(self):
         if reject_if_disallowed(self):
@@ -138,6 +195,11 @@ class Handler(BaseHTTPRequestHandler):
             html.append("<pre>" + json.dumps(counts, ensure_ascii=False, indent=2) + "</pre>")
             data = "".join(html).encode("utf-8")
             self.send_response(200)
+            origin = cors_origin_allowed(self)
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
+                self.send_header("Access-Control-Allow-Credentials", "false")
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -169,8 +231,10 @@ def self_test():
     assert parse_reaction(" ❤️ ") == "❤️"
     assert parse_reaction("👍 extra") == "👍 extra"
     assert host_allowed("sub.example.com") is False
+
     class Dummy:
         headers = {"Host": "example.com:8080"}
+
     assert tenant_key(Dummy(), "/heart") == "example.com|/heart"
 
 

@@ -30,6 +30,8 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
+    environment:
+      OPENHEART_ALLOWED_ORIGINS: ${OPENHEART_ALLOWED_ORIGINS:-https://your.website.com,https://your.website2.com}
     ports:
       - "8080:8080"
     volumes:
@@ -46,6 +48,12 @@ Run:
 docker compose up -d
 ```
 
+To allow your local Hugo preview during development:
+
+```bash
+OPENHEART_ALLOWED_ORIGINS=http://localhost:1313 docker compose up -d
+```
+
 ## Endpoints
 
 - `GET /` returns a tiny test page.
@@ -57,5 +65,6 @@ docker compose up -d
 - Data persists in `/data/openheart.db`.
 - The server listens on `0.0.0.0:8080` by default.
 - Set `OPENHEART_ALLOWED_DOMAINS=example.com,foo.com` to allow browser requests only from those domains and their subdomains.
+- Set `OPENHEART_ALLOWED_ORIGINS=https://site-a.com,https://site-b.com` to allow browser CORS requests from exact origins.
 - Data is keyed by `host + path`, so different domains using the same path keep separate counts.
 - Front-end usage reference: [open-heart-element](https://github.com/dddddddddzzzz/open-heart-element).

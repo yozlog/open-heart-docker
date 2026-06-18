@@ -4,6 +4,8 @@ services:
     # build:
     #   context: .
     #   dockerfile: Dockerfile
+    environment:
+      OPENHEART_ALLOWED_ORIGINS: ${OPENHEART_ALLOWED_ORIGINS:-https://your.website.com,https://your.website2.com}
     ports:
       - "8080:8080"
     volumes:
